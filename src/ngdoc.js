@@ -78,7 +78,7 @@ Doc.prototype = {
     function extractWords(text) {
       var tokens = text.toLowerCase().split(/[\.\s,`'"#]+/mg);
       tokens.forEach(function(key){
-        var match = key.match(/^((ng:|[\$_a-z])[\w\-_]+)/);
+        var match = key.match(/^(([\$_a-z])[\w\-_]+)/);
         if (match){
           key = match[1];
           if (!keywords[key]) {
@@ -386,7 +386,7 @@ Doc.prototype = {
             self.moduleName = match[1];
           }
         } else if (atName == 'param') {
-          match = text.match(/^\{([^}]+)\}\s+(([^\s=]+)|\[(\S+)=([^\]]+)\])\s+(.*)/);
+          match = text.match(/^\{([^}]+)\}\s+(([^\s]+)|\[(\S+)([^\]]+)\])\s+(.*)/);
                              //  1      1    23       3   4   4 5      5  2   6  6
           if (!match) {
             throw new Error("Not a valid 'param' format: " + text + ' (found in: ' + self.file + ':' + self.line + ')');
@@ -492,8 +492,8 @@ Doc.prototype = {
       }
       dom.h('Dependencies', self.requires, function(require){
         dom.tag('code', function() {
-          var id = require.name[0] == '$' ? 'ng.' + require.name : require.name,
-              name = require.name.split(/[\.:\/]/).pop();
+          var id = /[\.\/]/.test(require.name) ? require.name : 'ng.' + require.name,
+              name = require.name.split(/[\.:#\/]/).pop();
           dom.tag('a', {href: self.convertUrlToAbsolute(id)}, name);
         });
         dom.html(require.text);
@@ -531,6 +531,27 @@ Doc.prototype = {
   html_usage_parameters: function(dom) {
     var self = this;
     var params = this.param ? this.param : [];
+    dom.h('Parameters', this.param, function(param){
+      dom.tag('code', function() {
+        dom.text(param.name);
+        if (param.optional) {
+          dom.tag('i', function() {
+            dom.text('(optional');
+            if(param['default']) {
+              dom.text('=' + param['default']);
+            }
+            dom.text(')');
+          });
+        }
+        dom.text(' – {');
+        dom.text(param.type);
+        if (param.optional) {
+          dom.text('=');
+        }
+        dom.text('} – ');
+      });
+      dom.html(param.description);
+    });
     if(this.animations) {
       dom.h('Animations', this.animations, function(animations){
         dom.html('<ul>');
@@ -632,6 +653,48 @@ Doc.prototype = {
 
     dom.h('Usage', function() {
       dom.code(function() {
+        if (/controller/gi.test(self.name)) {
+          dom.text('$scope.');
+        }
+        dom.text(name.split(':').pop());
+        dom.text('(');
+        self.parameters(dom, ', ');
+        dom.text(');');
+      });
+
+      self.html_usage_parameters(dom);
+      self.html_usage_this(dom);
+      self.html_usage_returns(dom);
+    });
+    this.method_properties_events(dom);
+  },
+
+  html_usage_watch: function(dom){
+    var self = this;
+    var name = self.name;
+
+    dom.h('Usage', function() {
+      dom.code(function() {
+        dom.text('$scope.$watch(');
+        dom.text(((name.split(':').pop()).indexOf('service') !== -1)?('function() {\n\t return '+name.split(':').pop()+'()\n}'):('\''+name.split(':').pop()+'\''));
+        dom.text(', function() {\n\t');
+        self.parameters(dom, '', true);
+        dom.text('\n});');
+      });
+
+      self.html_usage_parameters(dom);
+      self.html_usage_this(dom);
+      self.html_usage_returns(dom);
+    });
+    this.method_properties_events(dom);
+  },
+
+  html_usage_controller: function(dom){
+    var self = this;
+    var name = self.name.split(/\./).pop();
+
+    dom.h('Usage', function() {
+      dom.code(function() {
         dom.text(name.split(':').pop());
         dom.text('(');
         self.parameters(dom, ', ');
@@ -649,7 +712,7 @@ Doc.prototype = {
     var self = this;
     dom.h('Usage', function() {
       dom.code(function() {
-        dom.text(self.name.split(':').pop());
+        dom.text(self.name);
       });
 
       self.html_usage_returns(dom);
@@ -680,10 +743,10 @@ Doc.prototype = {
           dom.text('as element:');
           dom.code(function() {
             dom.text('<');
-            dom.text(dashCase(self.shortName));
+            dom.text(dashCase(self.shortName.replace(/\{.*\}/g,'')));
             renderParams('\n       ', '="', '"');
             dom.text('>\n</');
-            dom.text(dashCase(self.shortName));
+            dom.text(dashCase(self.shortName.replace(/\{.*\}/g,'')));
             dom.text('>');
           });
         }
@@ -823,7 +886,7 @@ Doc.prototype = {
     if (this.param.length) {
       dom.h('Usage', function() {
         dom.code(function() {
-          dom.text(self.name.split('.').pop().split(':').pop());
+          dom.text(self.name.split('.').pop());
           dom.text('(');
           self.parameters(dom, ', ');
           dom.text(');');
@@ -846,6 +909,10 @@ Doc.prototype = {
   },
 
   html_usage_controller: function(dom) {
+    this.html_usage_interface(dom)
+  },
+
+  html_usage_model: function(dom) {
     this.html_usage_interface(dom)
   },
 
@@ -912,7 +979,7 @@ Doc.prototype = {
     var sep = prefix ? separator : '';
     (this.param||[]).forEach(function(param, i){
       if (!(skipFirst && i==0)) {
-        if (param.isProperty) { return; }
+        //if (param.isProperty) { return; }
         if (param.optional) {
           dom.text('[' + sep + param.name + ']');
         } else {
@@ -934,6 +1001,11 @@ var GLOBALS = /^angular\.([^\.]+)$/,
     MODULE_CONTROLLER = /^(.+)\.controllers?:([^\.]+)$/,
     MODULE_DIRECTIVE = /^(.+)\.directives?:([^\.]+)$/,
     MODULE_DIRECTIVE_INPUT = /^(.+)\.directives?:input\.([^\.]+)$/,
+    MODULE_OBJECT = /^(.+)\.object:(\.*.+)$/,
+    MODULE_MODEL = /^(.+)\.model:?(\.*.+)$/,
+    MODULE_FUNCTION = /^(.+)\.function:(\.*.+)$/,
+    MODULE_WATCH = /^(.+)\.watch:(\.*.+)$/,
+    MODULE_FILTER = /^(.+)\.([^\.])+\.filter:([^\.]+)$/,
     MODULE_CUSTOM = /^(.+)\.([^\.]+):([^\.]+)$/,
     MODULE_SERVICE = /^(.+)\.([^\.]+?)(Provider)?$/,
     MODULE_TYPE = /^([^\.]+)\..+\.([A-Z][^\.]+)$/;
@@ -980,12 +1052,22 @@ function title(doc) {
     return makeTitle(overview ? '' : match[1], '', 'module', match[1]);
   } else if (match = text.match(MODULE_MOCK)) {
     return makeTitle('angular.mock.' + match[1], 'API', 'module', 'ng');
-  } else if (match = text.match(MODULE_CONTROLLER) && doc.type === 'controller') {
+  } else if (match = text.match(MODULE_CONTROLLER)) {
     return makeTitle(match[2], 'controller', 'module', match[1]);
   } else if (match = text.match(MODULE_DIRECTIVE)) {
     return makeTitle(match[2], 'directive', 'module', match[1]);
   } else if (match = text.match(MODULE_DIRECTIVE_INPUT)) {
     return makeTitle('input [' + match[2] + ']', 'directive', 'module', match[1]);
+  } else if (match = text.match(MODULE_OBJECT)) {
+    return makeTitle(match[2], 'object', 'module', match[1]);
+  } else if (match = text.match(MODULE_MODEL)) {
+    return makeTitle(match[2], 'model', 'module', match[1]);
+  } else if (match = text.match(MODULE_FUNCTION)) {
+    return makeTitle(match[2], 'function', 'module', match[1]);
+  } else if (match = text.match(MODULE_WATCH)) {
+    return makeTitle(match[2], 'watch', 'module', match[1]);
+  } else if (match = text.match(MODULE_FILTER)) {
+    return makeTitle(match[2], 'filter', 'module', match[1]);
   } else if (match = text.match(MODULE_CUSTOM)) {
     return makeTitle(match[3], doc.ngdoc || match[2], 'module', match[1]);
   } else if (match = text.match(MODULE_TYPE) && doc.ngdoc === 'type') {
@@ -1039,7 +1121,7 @@ function scenarios(docs){
 function metadata(docs){
   var pages = [];
   docs.forEach(function(doc){
-    var path = (doc.name || '').split(/(\:\s*)/);
+    var path = (doc.name || '').split(/(\.|\:\s*)/);
     for ( var i = 1; i < path.length; i++) {
       path.splice(i, 1);
     }
@@ -1067,6 +1149,9 @@ function metadata(docs){
 var KEYWORD_PRIORITY = {
   '.index': 1,
   '.overview': 1,
+  '.application_overview': 1,
+  '.workspace_setup': 1,
+  '.formatting': 1,
   '.bootstrap': 2,
   '.mvc': 3,
   '.scopes': 4,
@@ -1263,7 +1348,7 @@ function checkBrokenLinks(docs, apis, options) {
   docs.forEach(function(doc) {
     byFullId[doc.section + '/' + doc.id] = doc;
     if (apis[doc.section]) {
-      doc.anchors.push('directive', 'service', 'filter', 'function');
+      doc.anchors.push('directive', 'service', 'filter', 'function', 'controller');
     }
   });
 

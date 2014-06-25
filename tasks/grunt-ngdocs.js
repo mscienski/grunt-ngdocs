@@ -33,7 +33,10 @@ module.exports = function(grunt) {
 
     //Copy the scripts into their own folder in docs, unless they are remote or default angular.js
     var gruntScriptsFolder = 'grunt-scripts';
-    options.scripts = _.map(options.scripts, function(file) {
+
+    options.scripts = _.map(grunt.file.expand({
+      cwd: options.dest
+    }, options.scripts), function(file) {
       if (file === 'angular.js') {
         return 'js/angular.min.js';
       }
@@ -58,7 +61,9 @@ module.exports = function(grunt) {
       }
     }
 
-    options.styles = _.map(options.styles, function(file) {
+    options.styles = _.map(grunt.file.expand({
+      cwd: options.dest
+    },options.styles), function(file) {
       if (/^((https?:)?\/\/|\.\.\/)/.test(file)) {
         return file;
       } else {

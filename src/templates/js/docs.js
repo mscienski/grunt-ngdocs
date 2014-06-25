@@ -286,6 +286,10 @@ docsApp.controller.DocsController = function($scope, $location, $window, section
       MODULE_DIRECTIVE = /^(.+)\.directives?:([^\.]+)$/,
       MODULE_DIRECTIVE_INPUT = /^(.+)\.directives?:input\.([^\.]+)$/,
       MODULE_FILTER = /^(.+)\.filters?:([^\.]+)$/,
+      MODULE_OBJECT = /^(.+)\.object:(\.*.+)$/,
+      MODULE_MODEL = /^(.+)\.model:(\.*.+)$/,
+      MODULE_FUNCTION = /^(.+)\.function:(\.*.+)$/,
+      MODULE_WATCH = /^(.+)\.watch:(\.*.+)$/,
       MODULE_CUSTOM = /^(.+)\.([^\.]+):([^\.]+)$/,
       MODULE_SERVICE = /^(.+)\.([^\.]+?)(Provider)?$/,
       MODULE_TYPE = /^([^\.]+)\..+\.([A-Z][^\.]+)$/;
@@ -381,6 +385,18 @@ docsApp.controller.DocsController = function($scope, $location, $window, section
         breadcrumb.push({ name: match[1], url: sectionPath + '/' + match[1] });
         breadcrumb.push({ name: 'input' });
         breadcrumb.push({ name: match[2] });
+      }  else if (match = partialId.match(MODULE_OBJECT)) {
+        breadcrumb.push({ name: match[1], url: sectionPath + '/' + match[1] });
+        breadcrumb.push({ name: match[2] });
+      } else if (match = partialId.match(MODULE_MODEL)) {
+        breadcrumb.push({ name: match[1], url: sectionPath + '/' + match[1] });
+        breadcrumb.push({ name: match[2] });
+      } else if (match = partialId.match(MODULE_FUNCTION)) {
+        breadcrumb.push({ name: match[1], url: sectionPath + '/' + match[1] });
+        breadcrumb.push({ name: match[2] });
+      } else if (match = partialId.match(MODULE_WATCH)) {
+        breadcrumb.push({ name: match[1], url: sectionPath + '/' + match[1] });
+        breadcrumb.push({ name: match[2] });
       } else if (match = partialId.match(MODULE_CUSTOM)) {
         match[1] = page.moduleName || match[1];
         breadcrumb.push({ name: match[1], url: sectionPath + '/' + match[1] });
@@ -433,6 +449,7 @@ docsApp.controller.DocsController = function($scope, $location, $window, section
     var cache = {},
         pages = sections[$location.path().split('/')[1]],
         modules = $scope.modules = [],
+        controllers = $scope.controllers = [],
         otherPages = $scope.pages = [],
         search = $scope.search,
         bestMatch = {page: null, rank:0};
@@ -466,6 +483,14 @@ docsApp.controller.DocsController = function($scope, $location, $window, section
         module(page.moduleName || match[1], section).directives.push(page);
       } else if (match = id.match(MODULE_DIRECTIVE_INPUT)) {
         module(page.moduleName || match[1], section).directives.push(page);
+      } else if (match = id.match(MODULE_OBJECT)) {
+        controller(page.moduleName || match[1], section).objects.push(page);
+      } else if (match = id.match(MODULE_MODEL)) {
+        controller(page.moduleName || match[1], section).models.push(page);
+      } else if (match = id.match(MODULE_FUNCTION)) {
+        controller(match[1], section).functions.push(page);
+      } else if (match = id.match(MODULE_WATCH)) {
+        controller(match[1], section).watches.push(page);
       } else if (match = id.match(MODULE_CUSTOM)) {
         if (page.type === 'service') {
           module(page.moduleName || match[1], section).service(match[3])[page.id.match(/^.+Provider$/) ? 'provider' : 'instance'] = page;
@@ -523,6 +548,24 @@ docsApp.controller.DocsController = function($scope, $location, $window, section
         modules.push(module);
       }
       return module;
+    }
+
+    function controller(name, section) {
+      var controller = cache[name.split(/\./).pop()];
+      if (!controller) {
+        controller = cache[name.split(/\./).pop()] = {
+          module: name.split(/\./)[0],
+          name: name.split(/\./).pop(),
+          url: (NG_DOCS.html5Mode ? '' : '#/') + section + '/' + name.split(/\./)[0] + '.controller:' + name.split(/\./).pop(),
+          objects: [],
+          models: [],
+          functions: [],
+          watches: [],
+          others: []
+        };
+        controllers.push(controller);
+      }
+      return controller;
     }
 
     function rank(page, terms) {
